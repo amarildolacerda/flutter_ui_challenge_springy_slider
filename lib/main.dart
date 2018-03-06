@@ -38,74 +38,79 @@ class _MyHomePageState extends State<MyHomePage> {
               color: Colors.white,
               borderRadius: new BorderRadius.all(new Radius.circular(15.0)),
             ),
-            child: new Column(
-              children: [
-                //-------- Top Bar -------
-                new Container(
-                  height: 60.0,
-                  child: new Row(
-                    children: [
-                      new Padding(
-                        padding: const EdgeInsets.only(left: 25.0),
-                        child: new Icon(
-                          Icons.menu,
-                          color: ACCENT_COLOR,
-                        ),
-                      ),
-                      new Expanded(child: new Container()),
-                      new Padding(
-                        padding: const EdgeInsets.only(right: 25.0),
-                        child: new Text(
-                          'SETTINGS',
-                          style: const TextStyle(
+            child: new ClipRRect(
+              borderRadius: new BorderRadius.circular(15.0),
+              child: new Column(
+                children: [
+                  //-------- Top Bar -------
+                  new Container(
+                    height: 60.0,
+                    child: new Row(
+                      children: [
+                        new Padding(
+                          padding: const EdgeInsets.only(left: 25.0),
+                          child: new Icon(
+                            Icons.menu,
                             color: ACCENT_COLOR,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.0,
                           ),
                         ),
-                      ),
-                    ],
+                        new Expanded(child: new Container()),
+                        new Padding(
+                          padding: const EdgeInsets.only(right: 25.0),
+                          child: new Text(
+                            'SETTINGS',
+                            style: const TextStyle(
+                              color: ACCENT_COLOR,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                //-------- Slider --------
-                new Expanded(
-                  child: new SpringySlider(),
-                ),
-
-                //------- Bottom Bar -----
-                new Container(
-                  height: 60.0,
-                  color: ACCENT_COLOR,
-                  child: new Row(
-                    children: [
-                      new Padding(
-                        padding: const EdgeInsets.only(left: 25.0),
-                        child: new Text(
-                          'MORE',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.0,
-                          ),
-                        ),
-                      ),
-                      new Expanded(child: new Container()),
-                      new Padding(
-                        padding: const EdgeInsets.only(right: 25.0),
-                        child: new Text(
-                          'STATS',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.0,
-                          ),
-                        ),
-                      ),
-                    ],
+                  //-------- Slider --------
+                  new Expanded(
+                    child: new SpringySlider(
+                      sliderPercent: 0.5,
+                    ),
                   ),
-                ),
-              ]
+
+                  //------- Bottom Bar -----
+                  new Container(
+                    height: 60.0,
+                    color: ACCENT_COLOR,
+                    child: new Row(
+                      children: [
+                        new Padding(
+                          padding: const EdgeInsets.only(left: 25.0),
+                          child: new Text(
+                            'MORE',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.0,
+                            ),
+                          ),
+                        ),
+                        new Expanded(child: new Container()),
+                        new Padding(
+                          padding: const EdgeInsets.only(right: 25.0),
+                          child: new Text(
+                            'STATS',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]
+              ),
             )
           ),
         ),
@@ -117,9 +122,11 @@ class _MyHomePageState extends State<MyHomePage> {
 class SpringySlider extends StatefulWidget {
 
   final tickCount;
+  final sliderPercent;
 
   SpringySlider({
     this.tickCount = 14,
+    this.sliderPercent = 0.0,
   });
 
   @override
@@ -128,21 +135,45 @@ class SpringySlider extends StatefulWidget {
 
 class _SpringySliderState extends State<SpringySlider> {
 
+  double sliderPercent;
+  double sliderPercentOnStartDrag;
+  Offset touchStart;
   Offset touchPoint;
+
+  @override
+  void initState() {
+    sliderPercent = widget.sliderPercent;
+  }
+
+  _onStartDrag(DragStartDetails details) {
+    touchStart = details.globalPosition;
+    sliderPercentOnStartDrag = sliderPercent;
+  }
 
   _onDrag(DragUpdateDetails details) {
     setState(() {
       touchPoint = details.globalPosition;
+
+      final dragVector = touchStart.dy - details.globalPosition.dy;
+      final normalizedDragVector = (dragVector / context.size.height).clamp(-1.0, 1.0);
+      sliderPercent = (sliderPercentOnStartDrag + normalizedDragVector).clamp(0.0, 1.0);
     });
+  }
+
+  _onDragEnd(DragEndDetails details) {
+    touchStart = null;
   }
 
   @override
   Widget build(BuildContext context) {
     return new GestureDetector(
+      onPanStart: _onStartDrag,
       onPanUpdate: _onDrag,
+      onPanEnd: _onDragEnd,
       child: new CustomPaint(
         painter: new SpringySliderPainter(
           color: ACCENT_COLOR,
+          sliderPercent: sliderPercent,
           touchPoint: touchPoint,
         ),
         child: new Container(),
@@ -153,12 +184,14 @@ class _SpringySliderState extends State<SpringySlider> {
 
 class SpringySliderPainter extends CustomPainter {
 
+  final double sliderPercent; // [0.0, 1.0]
   final Color color;
   final Offset touchPoint;
   final Paint sliderPaint;
   final Paint debugPaint;
 
   SpringySliderPainter({
+    this.sliderPercent = 0.0,
     this.color = Colors.black,
     this.touchPoint,
   }) : sliderPaint = new Paint(), debugPaint = new Paint() {
@@ -173,7 +206,9 @@ class SpringySliderPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.clipRect(new Rect.fromLTWH(0.0, 0.0, size.width, size.height));
 
-    final Point rightPoint = new Point(size.width, size.height / 2);
+    final sliderValueY = size.height - (size.height * sliderPercent);
+
+    final Point rightPoint = new Point(size.width, sliderValueY);
     Point rightHandle;
     if (this.touchPoint == null) {
       rightHandle = new Point(
@@ -182,7 +217,7 @@ class SpringySliderPainter extends CustomPainter {
       rightHandle = new Point(touchPoint.dx, touchPoint.dy);
     }
 
-    final Point leftPoint = new Point(-200.0, size.height / 4);
+    final Point leftPoint = new Point(-200.0, sliderValueY - (size.height / 3));
 
     final path = new Path();
     path.moveTo(rightPoint.x, rightPoint.y);
@@ -193,7 +228,7 @@ class SpringySliderPainter extends CustomPainter {
 
     canvas.drawPath(path, sliderPaint);
 
-    canvas.drawCircle(new Offset(size.width, size.height / 2), 10.0, debugPaint);
+    canvas.drawCircle(new Offset(rightPoint.x, rightPoint.y), 10.0, debugPaint);
   }
 
   @override
