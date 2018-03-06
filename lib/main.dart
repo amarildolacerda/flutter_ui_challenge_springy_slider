@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 void main() => runApp(new MyApp());
 
@@ -133,16 +134,39 @@ class SpringySlider extends StatefulWidget {
   _SpringySliderState createState() => new _SpringySliderState();
 }
 
-class _SpringySliderState extends State<SpringySlider> {
+class _SpringySliderState extends State<SpringySlider> with TickerProviderStateMixin {
 
   double sliderPercent;
   double sliderPercentOnStartDrag;
   Offset touchStart;
   Offset touchPoint;
 
+  AnimationController springAnimationController;
+  ScrollSpringSimulation springSimulation;
+
   @override
   void initState() {
     sliderPercent = widget.sliderPercent;
+
+    springSimulation = new ScrollSpringSimulation(
+        new SpringDescription(
+          mass: 1.0,
+          stiffness: 1.0,
+          damping: 1.0,
+        ),
+        0.0,
+        1.0,
+        0.0,
+    );
+
+    springAnimationController = new AnimationController(vsync: this)
+    ..addListener(() {
+      print('Spring: ${springSimulation.x(springAnimationController.value)}');
+    });
+
+//    for (var i = 0; i < 100; ++i) {
+//      print('Spring value: ${springSimulation.x(i.toDouble())}');
+//    }
   }
 
   _onStartDrag(DragStartDetails details) {
@@ -164,6 +188,8 @@ class _SpringySliderState extends State<SpringySlider> {
   }
 
   _onDragEnd(DragEndDetails details) {
+//    springAnimationController.animateWith(springSimulation);
+
     setState(() {
       touchStart = null;
       touchPoint = null;
@@ -219,48 +245,32 @@ class SpringySliderPainter extends CustomPainter {
     print('Slider Percent: $sliderPercent, Prev Percent: $prevSliderPercent');
     final sliderValueY = size.height - (size.height * sliderPercent);
     final prevSliderValueY = size.height - (size.height * prevSliderPercent);
+    final midPointY = ((sliderValueY - prevSliderValueY) * 1.2 + prevSliderValueY).clamp(0.0, size.height);
 
     Point leftPoint, midPoint, rightPoint;
 
-    leftPoint = new Point(0.0, prevSliderValueY);
-    rightPoint = new Point(size.width, prevSliderValueY);
+    leftPoint = new Point(-100.0, prevSliderValueY);
+    rightPoint = new Point(size.width + 50.0, prevSliderValueY);
 
     if (null != touchPoint) {
-      midPoint = new Point(touchPoint.dx, sliderValueY);
+      midPoint = new Point(touchPoint.dx, midPointY);
     } else {
-      midPoint = new Point(size.width / 2, prevSliderValueY);
+      midPoint = new Point(size.width / 2, midPointY);
     }
-
-//    Point rightHandle;
-//    if (this.touchPoint == null) {
-//      print(' - Painting straight line.');
-//      rightHandle = new Point(size.width - 10.0, sliderValueY);
-//    } else {
-//      print(' - Painting curve');
-//      final handleY = (700.0 * (prevSliderPercent - sliderPercent) + rightPoint.y).clamp(0.0, size.height);
-//      rightHandle = new Point(touchPoint.dx, handleY);
-//    }
-
 
     final path = new Path();
     path.moveTo(midPoint.x, midPoint.y);
-    path.quadraticBezierTo(midPoint.x - 75.0, midPoint.y, leftPoint.x, leftPoint.y);
+    path.quadraticBezierTo(midPoint.x - 100.0, midPoint.y, leftPoint.x, leftPoint.y);
     path.lineTo(0.0, size.height);
     path.moveTo(midPoint.x, midPoint.y);
-    path.quadraticBezierTo(midPoint.x + 75.0, midPoint.y, rightPoint.x, rightPoint.y);
+    path.quadraticBezierTo(midPoint.x + 100.0, midPoint.y, rightPoint.x, rightPoint.y);
     path.lineTo(size.width, size.height);
     path.lineTo(0.0, size.height);
     path.close();
-//    path.moveTo(rightPoint.x, rightPoint.y);
-//    path.quadraticBezierTo(rightHandle.x, rightHandle.y, leftPoint.x, leftPoint.y);
-//    path.lineTo(0.0, size.height);
-//    path.lineTo(size.width, size.height);
-//    path.close();
 
     canvas.drawPath(path, sliderPaint);
 
     canvas.drawCircle(new Offset(rightPoint.x, rightPoint.y), 10.0, debugPaint);
-//    canvas.drawCircle(new Offset(rightHandle.x, rightHandle.y), 5.0, debugPaint);
   }
 
   @override
