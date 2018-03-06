@@ -218,32 +218,49 @@ class SpringySliderPainter extends CustomPainter {
 
     print('Slider Percent: $sliderPercent, Prev Percent: $prevSliderPercent');
     final sliderValueY = size.height - (size.height * sliderPercent);
+    final prevSliderValueY = size.height - (size.height * prevSliderPercent);
 
-    final Point rightPoint = new Point(size.width + 20.0, sliderValueY);
-    Point rightHandle;
-    if (this.touchPoint == null) {
-      print(' - Painting straight line.');
-      rightHandle = new Point(size.width - 10.0, sliderValueY);
+    Point leftPoint, midPoint, rightPoint;
+
+    leftPoint = new Point(0.0, prevSliderValueY);
+    rightPoint = new Point(size.width, prevSliderValueY);
+
+    if (null != touchPoint) {
+      midPoint = new Point(touchPoint.dx, sliderValueY);
     } else {
-      print(' - Painting curve');
-      final handleY = (700.0 * (prevSliderPercent - sliderPercent) + rightPoint.y).clamp(0.0, size.height);
-      rightHandle = new Point(touchPoint.dx, handleY);
+      midPoint = new Point(size.width / 2, prevSliderValueY);
     }
 
-    final prevSliderValueY = size.height - (size.height * prevSliderPercent);
-    final Point leftPoint = new Point(-200.0, prevSliderValueY);
+//    Point rightHandle;
+//    if (this.touchPoint == null) {
+//      print(' - Painting straight line.');
+//      rightHandle = new Point(size.width - 10.0, sliderValueY);
+//    } else {
+//      print(' - Painting curve');
+//      final handleY = (700.0 * (prevSliderPercent - sliderPercent) + rightPoint.y).clamp(0.0, size.height);
+//      rightHandle = new Point(touchPoint.dx, handleY);
+//    }
+
 
     final path = new Path();
-    path.moveTo(rightPoint.x, rightPoint.y);
-    path.quadraticBezierTo(rightHandle.x, rightHandle.y, leftPoint.x, leftPoint.y);
+    path.moveTo(midPoint.x, midPoint.y);
+    path.quadraticBezierTo(midPoint.x - 75.0, midPoint.y, leftPoint.x, leftPoint.y);
     path.lineTo(0.0, size.height);
+    path.moveTo(midPoint.x, midPoint.y);
+    path.quadraticBezierTo(midPoint.x + 75.0, midPoint.y, rightPoint.x, rightPoint.y);
     path.lineTo(size.width, size.height);
+    path.lineTo(0.0, size.height);
     path.close();
+//    path.moveTo(rightPoint.x, rightPoint.y);
+//    path.quadraticBezierTo(rightHandle.x, rightHandle.y, leftPoint.x, leftPoint.y);
+//    path.lineTo(0.0, size.height);
+//    path.lineTo(size.width, size.height);
+//    path.close();
 
     canvas.drawPath(path, sliderPaint);
 
     canvas.drawCircle(new Offset(rightPoint.x, rightPoint.y), 10.0, debugPaint);
-    canvas.drawCircle(new Offset(rightHandle.x, rightHandle.y), 5.0, debugPaint);
+//    canvas.drawCircle(new Offset(rightHandle.x, rightHandle.y), 5.0, debugPaint);
   }
 
   @override
