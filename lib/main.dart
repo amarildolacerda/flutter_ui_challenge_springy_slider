@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 void main() => runApp(new MyApp());
@@ -125,12 +127,23 @@ class SpringySlider extends StatefulWidget {
 }
 
 class _SpringySliderState extends State<SpringySlider> {
+
+  Offset touchPoint;
+
+  _onDrag(DragUpdateDetails details) {
+    setState(() {
+      touchPoint = details.globalPosition;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return new GestureDetector(
+      onPanUpdate: _onDrag,
       child: new CustomPaint(
         painter: new SpringySliderPainter(
           color: ACCENT_COLOR,
+          touchPoint: touchPoint,
         ),
         child: new Container(),
       )
@@ -141,18 +154,46 @@ class _SpringySliderState extends State<SpringySlider> {
 class SpringySliderPainter extends CustomPainter {
 
   final Color color;
+  final Offset touchPoint;
   final Paint sliderPaint;
+  final Paint debugPaint;
 
   SpringySliderPainter({
     this.color = Colors.black,
-  }) : sliderPaint = new Paint() {
+    this.touchPoint,
+  }) : sliderPaint = new Paint(), debugPaint = new Paint() {
     sliderPaint.color = this.color;
     sliderPaint.style = PaintingStyle.fill;
+
+    debugPaint.color = Colors.black;
+    debugPaint.style = PaintingStyle.fill;
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(new Rect.fromLTWH(0.0, size.height / 2, size.width, size.height / 2), sliderPaint);
+    canvas.clipRect(new Rect.fromLTWH(0.0, 0.0, size.width, size.height));
+
+    final Point rightPoint = new Point(size.width, size.height / 2);
+    Point rightHandle;
+    if (this.touchPoint == null) {
+      rightHandle = new Point(
+          2 * size.width / 3, size.height / 2 + 200.0);
+    } else {
+      rightHandle = new Point(touchPoint.dx, touchPoint.dy);
+    }
+
+    final Point leftPoint = new Point(-200.0, size.height / 4);
+
+    final path = new Path();
+    path.moveTo(rightPoint.x, rightPoint.y);
+    path.quadraticBezierTo(rightHandle.x, rightHandle.y, leftPoint.x, leftPoint.y);
+    path.lineTo(0.0, size.height);
+    path.lineTo(size.width, size.height);
+    path.close();
+
+    canvas.drawPath(path, sliderPaint);
+
+    canvas.drawCircle(new Offset(size.width, size.height / 2), 10.0, debugPaint);
   }
 
   @override
