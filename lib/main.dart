@@ -146,22 +146,29 @@ class _SpringySliderState extends State<SpringySlider> {
   }
 
   _onStartDrag(DragStartDetails details) {
-    touchStart = details.globalPosition;
+    touchStart = (context.findRenderObject() as RenderBox)
+        .globalToLocal(details.globalPosition);
+
     sliderPercentOnStartDrag = sliderPercent;
   }
 
   _onDrag(DragUpdateDetails details) {
     setState(() {
-      touchPoint = details.globalPosition;
+      touchPoint = (context.findRenderObject() as RenderBox)
+          .globalToLocal(details.globalPosition);
 
-      final dragVector = touchStart.dy - details.globalPosition.dy;
+      final dragVector = touchStart.dy - touchPoint.dy;
       final normalizedDragVector = (dragVector / context.size.height).clamp(-1.0, 1.0);
       sliderPercent = (sliderPercentOnStartDrag + normalizedDragVector).clamp(0.0, 1.0);
     });
   }
 
   _onDragEnd(DragEndDetails details) {
-    touchStart = null;
+    setState(() {
+      touchStart = null;
+      touchPoint = null;
+      sliderPercentOnStartDrag = null;
+    });
   }
 
   @override
@@ -174,6 +181,7 @@ class _SpringySliderState extends State<SpringySlider> {
         painter: new SpringySliderPainter(
           color: ACCENT_COLOR,
           sliderPercent: sliderPercent,
+          prevSliderPercent: sliderPercentOnStartDrag ?? sliderPercent,
           touchPoint: touchPoint,
         ),
         child: new Container(),
@@ -185,6 +193,7 @@ class _SpringySliderState extends State<SpringySlider> {
 class SpringySliderPainter extends CustomPainter {
 
   final double sliderPercent; // [0.0, 1.0]
+  final double prevSliderPercent; // [0.0, 1.0]
   final Color color;
   final Offset touchPoint;
   final Paint sliderPaint;
@@ -192,6 +201,7 @@ class SpringySliderPainter extends CustomPainter {
 
   SpringySliderPainter({
     this.sliderPercent = 0.0,
+    this.prevSliderPercent = 0.0,
     this.color = Colors.black,
     this.touchPoint,
   }) : sliderPaint = new Paint(), debugPaint = new Paint() {
@@ -206,18 +216,22 @@ class SpringySliderPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.clipRect(new Rect.fromLTWH(0.0, 0.0, size.width, size.height));
 
+    print('Slider Percent: $sliderPercent, Prev Percent: $prevSliderPercent');
     final sliderValueY = size.height - (size.height * sliderPercent);
 
-    final Point rightPoint = new Point(size.width, sliderValueY);
+    final Point rightPoint = new Point(size.width + 20.0, sliderValueY);
     Point rightHandle;
     if (this.touchPoint == null) {
-      rightHandle = new Point(
-          2 * size.width / 3, size.height / 2 + 200.0);
+      print(' - Painting straight line.');
+      rightHandle = new Point(size.width - 10.0, sliderValueY);
     } else {
-      rightHandle = new Point(touchPoint.dx, touchPoint.dy);
+      print(' - Painting curve');
+      final handleY = (700.0 * (prevSliderPercent - sliderPercent) + rightPoint.y).clamp(0.0, size.height);
+      rightHandle = new Point(touchPoint.dx, handleY);
     }
 
-    final Point leftPoint = new Point(-200.0, sliderValueY - (size.height / 3));
+    final prevSliderValueY = size.height - (size.height * prevSliderPercent);
+    final Point leftPoint = new Point(-200.0, prevSliderValueY);
 
     final path = new Path();
     path.moveTo(rightPoint.x, rightPoint.y);
@@ -229,6 +243,7 @@ class SpringySliderPainter extends CustomPainter {
     canvas.drawPath(path, sliderPaint);
 
     canvas.drawCircle(new Offset(rightPoint.x, rightPoint.y), 10.0, debugPaint);
+    canvas.drawCircle(new Offset(rightHandle.x, rightHandle.y), 5.0, debugPaint);
   }
 
   @override
