@@ -233,6 +233,7 @@ class SpringySliderPainter extends CustomPainter {
   }) : sliderPaint = new Paint(), debugPaint = new Paint() {
     sliderPaint.color = this.color;
     sliderPaint.style = PaintingStyle.fill;
+    sliderPaint.strokeWidth = 2.0;
 
     debugPaint.color = Colors.black;
     debugPaint.style = PaintingStyle.fill;
@@ -245,31 +246,94 @@ class SpringySliderPainter extends CustomPainter {
     print('Slider Percent: $sliderPercent, Prev Percent: $prevSliderPercent');
     final sliderValueY = size.height - (size.height * sliderPercent);
     final prevSliderValueY = size.height - (size.height * prevSliderPercent);
-    final midPointY = ((sliderValueY - prevSliderValueY) * 1.2 + prevSliderValueY).clamp(0.0, size.height);
+    final rightCrestY = ((sliderValueY - prevSliderValueY) * 1.2 + prevSliderValueY).clamp(0.0, size.height);
+    final leftCrestY = ((sliderValueY - prevSliderValueY) * -1.2 + prevSliderValueY);
 
-    Point leftPoint, midPoint, rightPoint;
+    Point leftPoint, leftCrestPoint, centerPoint, rightCrestPoint, rightPoint;
 
-    leftPoint = new Point(-100.0, prevSliderValueY);
-    rightPoint = new Point(size.width + 50.0, prevSliderValueY);
+    final xOffset = size.width * 0.15;
+    canvas.translate(xOffset, 0.0);
+
+    final touchOffset = null != touchPoint ? (touchPoint.dx - (size.width / 2)) : 0.0;
+    final left = -size.width;
+    final leftCrest = -(size.width / 2) - touchOffset;
+    final center = 0.0;
+    final rightCrest = (size.width / 2) + touchOffset;
+    final right = size.width;
+
+    centerPoint = new Point(center, prevSliderValueY);
+    rightPoint = new Point(right, prevSliderValueY);
 
     if (null != touchPoint) {
-      midPoint = new Point(touchPoint.dx, midPointY);
+      rightCrestPoint = new Point(rightCrest, rightCrestY);
     } else {
-      midPoint = new Point(size.width / 2, midPointY);
+      rightCrestPoint = new Point(rightCrest, rightCrestY);
     }
 
-    final path = new Path();
-    path.moveTo(midPoint.x, midPoint.y);
-    path.quadraticBezierTo(midPoint.x - 100.0, midPoint.y, leftPoint.x, leftPoint.y);
-    path.lineTo(0.0, size.height);
-    path.moveTo(midPoint.x, midPoint.y);
-    path.quadraticBezierTo(midPoint.x + 100.0, midPoint.y, rightPoint.x, rightPoint.y);
-    path.lineTo(size.width, size.height);
-    path.lineTo(0.0, size.height);
-    path.close();
+    leftPoint = new Point(left, prevSliderValueY);
 
-    canvas.drawPath(path, sliderPaint);
+    if (null != touchPoint) {
+      leftCrestPoint = new Point(leftCrest, leftCrestY);
+    } else {
+      leftCrestPoint = new Point(leftCrest, leftCrestY);
+    }
 
+    // Fill bottom rectangle
+    final path2 = new Path();
+    path2.moveTo(leftPoint.x, leftPoint.y);
+    path2.lineTo(rightPoint.x, rightPoint.y);
+    path2.lineTo(size.width, size.height);
+    path2.lineTo(leftPoint.x, size.height);
+    path2.lineTo(leftPoint.x, leftPoint.y);
+    path2.close();
+    sliderPaint.blendMode = debugPaint.blendMode;
+    canvas.drawPath(path2, sliderPaint);
+
+    // Move to left crest and curve to left of wave.
+    final pathLeft = new Path();
+    pathLeft.moveTo(leftCrestPoint.x, leftCrestPoint.y);
+    pathLeft.quadraticBezierTo(
+        leftCrestPoint.x - 100.0, leftCrestPoint.y,
+        leftPoint.x, leftPoint.y
+    );
+
+    // Move to left crest and curve to center of wave.
+    pathLeft.moveTo(leftCrestPoint.x, leftCrestPoint.y);
+    pathLeft.quadraticBezierTo(
+        leftCrestPoint.x + 100.0, leftCrestPoint.y,
+        centerPoint.x, centerPoint.y
+    );
+    pathLeft.lineTo(leftPoint.x, leftPoint.y);
+    pathLeft.close();
+
+    sliderPaint.blendMode = sliderValueY > prevSliderValueY
+        ? BlendMode.src
+        : BlendMode.dstOut;
+    canvas.drawPath(pathLeft, sliderPaint);
+
+    // Move to right crest and curve to center of wave.
+    final pathRight = new Path();
+    pathRight.moveTo(rightCrestPoint.x, rightCrestPoint.y);
+    pathRight.quadraticBezierTo(
+        rightCrestPoint.x - 100.0, rightCrestPoint.y,
+        centerPoint.x, centerPoint.y
+    );
+
+    // Move to right crest and curve to right of wave.
+    pathRight.moveTo(rightCrestPoint.x, rightCrestPoint.y);
+    pathRight.quadraticBezierTo(
+        rightCrestPoint.x + 100.0, rightCrestPoint.y,
+        rightPoint.x, rightPoint.y
+    );
+    pathRight.lineTo(centerPoint.x, centerPoint.y);
+    pathRight.close();
+
+    sliderPaint.blendMode = sliderValueY > prevSliderValueY
+      ? BlendMode.dstOut
+      : BlendMode.src;
+    canvas.drawPath(pathRight, sliderPaint);
+
+    // Debug drawing
     canvas.drawCircle(new Offset(rightPoint.x, rightPoint.y), 10.0, debugPaint);
   }
 
