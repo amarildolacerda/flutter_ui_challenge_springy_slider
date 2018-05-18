@@ -106,7 +106,31 @@ class _SpringySliderState extends State<SpringySlider> {
   final paddingTop = 50.0;
   final paddingBottom = 50.0;
 
-  double sliderPercent = 0.05;
+  double sliderPercent = 0.5;
+  double startDragY;
+  double startDragPercent;
+
+  void onDragStart(DragStartDetails details) {
+    startDragY = details.globalPosition.dy;
+    startDragPercent = sliderPercent;
+  }
+
+  void onDragUpdate(DragUpdateDetails details) {
+    final dragDistance = startDragY - details.globalPosition.dy;
+    final sliderHeight = context.size.height;
+    final dragPercent = dragDistance / sliderHeight;
+
+    setState(() {
+      sliderPercent = startDragPercent + dragPercent;
+    });
+  }
+
+  void onDragEnd(DragEndDetails details) {
+    setState(() {
+      startDragY = null;
+      startDragPercent = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +208,15 @@ class _SpringySliderState extends State<SpringySlider> {
               ],
             );
           },
+        ),
+        // Drag detector
+        new GestureDetector(
+          onPanStart: onDragStart,
+          onPanUpdate: onDragUpdate,
+          onPanEnd: onDragEnd,
+          child: new Container(
+            color: Colors.transparent,
+          ),
         ),
       ],
     );
