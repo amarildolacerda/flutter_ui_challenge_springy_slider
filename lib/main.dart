@@ -103,20 +103,32 @@ class SpringySlider extends StatefulWidget {
 }
 
 class _SpringySliderState extends State<SpringySlider> {
+  final paddingTop = 50.0;
+  final paddingBottom = 50.0;
+
+  double sliderPercent = 0.05;
+
   @override
   Widget build(BuildContext context) {
     return new Stack(
       children: <Widget>[
+        // Colorful marks on a white background.
         new SliderMarks(
           markCount: widget.markCount,
           color: widget.positiveColor,
-          paddingTop: 50.0,
-          paddingBottom: 50.0,
+          paddingTop: paddingTop,
+          paddingBottom: paddingBottom,
         ),
+        // Light marks on a colorful background, clipped based on the
+        // slider position and user interaction.
         new LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             return new ClipPath(
-              clipper: new SliderClipper(),
+              clipper: new SliderClipper(
+                sliderPercent: sliderPercent,
+                paddingTop: paddingTop,
+                paddingBottom: paddingBottom,
+              ),
               child: new Stack(
                 children: <Widget>[
                   new Container(
@@ -125,11 +137,51 @@ class _SpringySliderState extends State<SpringySlider> {
                   new SliderMarks(
                     markCount: widget.markCount,
                     color: widget.negativeColor,
-                    paddingTop: 50.0,
-                    paddingBottom: 50.0,
+                    paddingTop: paddingTop,
+                    paddingBottom: paddingBottom,
                   ),
                 ],
               ),
+            );
+          },
+        ),
+        // Positive and negative points displays above and below the current
+        // slider position.
+        new LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final height = constraints.maxHeight - paddingTop - paddingBottom;
+            print('Max height: ${height}');
+            final sliderY = height * (1.0 - sliderPercent) + paddingTop;
+            print('slider y: $sliderY');
+            final pointsYouNeed = (100 * (1.0 - sliderPercent)).round();
+            final pointsYouHave = (100 * sliderPercent).round();
+
+            return new Stack(
+              children: <Widget>[
+                new Positioned(
+                  left: 30.0,
+                  top: sliderY - 50.0,
+                  child: new FractionalTranslation(
+                    translation: const Offset(0.0, -1.0),
+                    child: new Points(
+                      points: pointsYouNeed,
+                      isAboveSlider: true,
+                      isPointsYouNeed: true,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ),
+                new Positioned(
+                  left: 30.0,
+                  top: sliderY + 50.0,
+                  child: new Points(
+                    points: pointsYouHave,
+                    isAboveSlider: false,
+                    isPointsYouNeed: false,
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -222,16 +274,31 @@ class SliderMarksPainter extends CustomPainter {
 }
 
 class SliderClipper extends CustomClipper<Path> {
+  final double sliderPercent;
+  final double paddingTop;
+  final double paddingBottom;
+
+  SliderClipper({
+    this.sliderPercent = 0.0,
+    this.paddingTop = 0.0,
+    this.paddingBottom = 0.0,
+  });
+
   @override
   Path getClip(Size size) {
     Path compositePath = new Path();
 
+    final top = paddingTop;
+    final bottom = size.height;
+    final height = (bottom - paddingBottom) - top;
+    final percentFromBottom = 1.0 - sliderPercent;
+
     compositePath.addRect(
-      new Rect.fromLTWH(
+      new Rect.fromLTRB(
         0.0,
-        size.height / 2,
+        top + (percentFromBottom * height),
         size.width,
-        size.height / 2,
+        bottom,
       ),
     );
 
@@ -241,5 +308,67 @@ class SliderClipper extends CustomClipper<Path> {
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) {
     return true;
+  }
+}
+
+class Points extends StatelessWidget {
+  final int points;
+  final bool isAboveSlider;
+  final bool isPointsYouNeed;
+  final Color color;
+
+  Points({
+    this.points,
+    this.isAboveSlider = true,
+    this.isPointsYouNeed = true,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = points / 100.0;
+    final pointTextSize = 30.0 + (70.0 * percent);
+
+    return new Row(
+      crossAxisAlignment: isAboveSlider ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: <Widget>[
+        new FractionalTranslation(
+          translation: new Offset(0.0, isAboveSlider ? 0.18 : -0.18),
+          child: new Text(
+            '$points',
+            style: new TextStyle(
+              fontSize: pointTextSize,
+              color: color,
+            ),
+          ),
+        ),
+        new Padding(
+          padding: const EdgeInsets.only(left: 8.0),
+          child: new Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              new Padding(
+                padding: const EdgeInsets.only(bottom: 4.0),
+                child: new Text(
+                  'POINTS',
+                  style: new TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+              new Text(
+                isPointsYouNeed ? 'YOU NEED' : 'YOU HAVE',
+                style: new TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        )
+      ],
+    );
   }
 }
