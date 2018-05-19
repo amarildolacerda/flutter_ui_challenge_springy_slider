@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 
-void main() => runApp(new MyApp());
+void main() {
+  timeDilation = 1.0;
+  runApp(new MyApp());
+}
 
 class MyApp extends StatelessWidget {
   @override
@@ -156,11 +159,11 @@ class _SpringySliderState extends State<SpringySlider> with TickerProviderStateM
           paddingBottom: paddingBottom,
         ),
         // Debug UI
-        new SliderDebug(
-          sliderController: sliderController,
-          paddingTop: paddingTop,
-          paddingBottom: paddingBottom,
-        ),
+//        new SliderDebug(
+//          sliderController: sliderController,
+//          paddingTop: paddingTop,
+//          paddingBottom: paddingBottom,
+//        ),
         // Drag detector
         new SliderDragger(
           sliderController: sliderController,
@@ -515,7 +518,8 @@ class SliderClipper extends CustomClipper<Path> {
     final bottom = size.height - paddingBottom;
     final height = bottom - top;
     final basePercentFromBottom = 1.0 - sliderController.sliderPercent;
-    final dragPercentFromBottom = 1.0 - sliderController.draggingPercent;
+    final dragPercentDiff = sliderController.draggingPercent - sliderController.sliderPercent;
+    final dragPercentFromBottom = 1.0 - (sliderController.sliderPercent + (dragPercentDiff * 1.2));
 
     final baseY = top + (basePercentFromBottom * height);
     final leftX = -0.15 * size.width;
@@ -576,18 +580,63 @@ class SliderClipper extends CustomClipper<Path> {
     Path compositePath = new Path();
 
     final top = paddingTop;
-    final bottom = size.height;
-    final height = (bottom - paddingBottom) - top;
-    final percentFromBottom = 1.0 - sliderController.sliderPercent;
+    final bottom = size.height - paddingBottom;
+    final height = bottom - top;
+    final basePercentFromBottom = 1.0 - sliderController.sliderSpringingPercent;
+    final crestSpringPercentFromBottom = 1.0 - sliderController.crestSpringingPercent;
 
-    compositePath.addRect(
-      new Rect.fromLTRB(
-        0.0,
-        top + (percentFromBottom * height),
-        size.width,
-        bottom,
-      ),
-    );
+    final baseY = top + (basePercentFromBottom * height);
+    final leftX = -0.15 * size.width;
+    final leftPoint = new Point(leftX, baseY);
+    final rightX = 0.15 * size.width + size.width;
+    final rightPoint = new Point(rightX, baseY);
+
+    final crestY = top + (crestSpringPercentFromBottom * height);
+    final crestPoint = new Point(size.width / 2, crestY.clamp(top, bottom));
+
+    print('Drawing spring blob. BaseY: $baseY, crestY: $crestY');
+
+    // If user drags beyond top/bottom boundary
+    double excessDrag = 0.0;
+    if (sliderController.sliderSpringingPercent < 0.0) {
+      excessDrag = sliderController.sliderSpringingPercent;
+    } else if (sliderController.sliderSpringingPercent > 1.0) {
+      excessDrag = sliderController.sliderSpringingPercent - 1.0;
+    }
+    final baseControlPointWidth = 150.0;
+    final thickeningFactor = excessDrag * height * 0.05;
+    final controlPointWidth = (200.0 * thickeningFactor).abs() + baseControlPointWidth;
+
+    // Fill bottom rectangle
+    final path2 = new Path();
+    path2.moveTo(leftPoint.x, leftPoint.y);
+    path2.lineTo(rightPoint.x, rightPoint.y);
+    path2.lineTo(size.width, size.height);
+    path2.lineTo(leftPoint.x, size.height);
+    path2.lineTo(leftPoint.x, leftPoint.y);
+    path2.close();
+//    sliderPaint.blendMode = debugPaint.blendMode;
+//    canvas.drawPath(path2, sliderPaint);
+    compositePath.addPath(path2, const Offset(0.0, 0.0));
+
+    // Move to right crest and curve to left of wave.
+    final pathRight = new Path();
+    pathRight.moveTo(crestPoint.x, crestPoint.y);
+    pathRight.quadraticBezierTo(
+        crestPoint.x - controlPointWidth, crestPoint.y, leftPoint.x, leftPoint.y);
+
+    // Move to right crest and curve to right of wave.
+    pathRight.moveTo(crestPoint.x, crestPoint.y);
+    pathRight.quadraticBezierTo(
+        crestPoint.x + controlPointWidth, crestPoint.y, rightPoint.x, rightPoint.y);
+    pathRight.lineTo(leftPoint.x, leftPoint.y);
+    pathRight.close();
+
+    if (crestSpringPercentFromBottom > basePercentFromBottom) {
+      // We want to remove the right path.
+      compositePath.fillType = PathFillType.evenOdd;
+    }
+    compositePath.addPath(pathRight, const Offset(0.0, 0.0));
 
     return compositePath;
   }
@@ -667,6 +716,12 @@ class SpringySliderController extends ChangeNotifier {
     damping: 30.0,
   );
 
+  final SpringDescription crestSpring = new SpringDescription(
+    mass: 1.0,
+    stiffness: 10.0,
+    damping: 1.0,
+  );
+
   final TickerProvider _vsync;
 
   SpringySliderState _state = SpringySliderState.idle;
@@ -680,13 +735,18 @@ class SpringySliderController extends ChangeNotifier {
   double _draggingHorizontalPercent;
 
   // When springing to new slider value, this is where the UI is springing from.
-  double _springStartPercent;
+  double _sliderSpringStartPercent;
   // When springing to new slider value, this is where the UI is springing to.
-  double _springEndPercent;
+  double _sliderSpringEndPercent;
   // Current slider value during spring effect.
-  double _springingPercent;
-  // Physics spring.
+  double _sliderSpringingPercent;
+  // Physics spring for the slider value.
   SpringSimulation _sliderSpringSimulation;
+  double _crestSpringStartPercent;
+  double _crestSpringEndPercent;
+  double _crestSpringingPercent;
+  // Physics spring for the drag crest/trough.
+  SpringSimulation _crestSpringSimulation;
   // Ticker that computes current spring position based on time.
   Ticker _springTicker;
   // Elapsed time that has passed since the start of the spring.
@@ -743,14 +803,20 @@ class SpringySliderController extends ChangeNotifier {
   void onDragEnd() {
     print('onDragEnd()');
     _state = SpringySliderState.springing;
-    _springingPercent = _sliderPercent;
-    _springStartPercent = _sliderPercent;
-    _springEndPercent = _draggingPercent.clamp(0.0, 1.0);
+
+    _sliderSpringingPercent = _sliderPercent;
+    _sliderSpringStartPercent = _sliderPercent;
+    _sliderSpringEndPercent = _draggingPercent.clamp(0.0, 1.0);
+
+    _crestSpringingPercent = draggingPercent;
+    _crestSpringStartPercent = draggingPercent;
+    _crestSpringEndPercent = _sliderSpringStartPercent;
+
     _draggingPercent = null;
 
     // We update the _sliderPercent so clients don't need to wait
     // for springing to finish.
-    _sliderPercent = _springEndPercent;
+    _sliderPercent = _sliderSpringEndPercent;
 
     _startSpringing();
 
@@ -758,28 +824,56 @@ class SpringySliderController extends ChangeNotifier {
   }
 
   void _startSpringing() {
-    print('_startSpringing(), from: $_springStartPercent, to: $_springEndPercent');
+    print('_startSpringing(), from: $_sliderSpringStartPercent, to: $_sliderSpringEndPercent');
+
+    if (_sliderSpringStartPercent == _sliderSpringEndPercent) {
+      _state = SpringySliderState.idle;
+      notifyListeners();
+      return;
+    }
+
     _sliderSpringSimulation = new SpringSimulation(
       sliderSpring,
-      _springStartPercent,
-      _springEndPercent,
+      _sliderSpringStartPercent,
+      _sliderSpringEndPercent,
       0.0,
+    );
+
+    final crestSpringNormal = (_crestSpringEndPercent - _crestSpringStartPercent) /
+        ((_crestSpringEndPercent - _crestSpringStartPercent)).abs();
+    _crestSpringSimulation = new SpringSimulation(
+      crestSpring,
+      _crestSpringStartPercent,
+      _crestSpringEndPercent,
+      0.5 * crestSpringNormal,
     );
 
     _springTime = 0.0;
 
     _springTicker = _vsync.createTicker(_springTick)..start();
+
+    notifyListeners();
   }
 
   void _springTick(Duration deltaTime) {
 //    print('_sprintTick()');
-    _springTime += deltaTime.inMilliseconds.toDouble() / 1000.0;
+    final _lastFrameTime = deltaTime.inMilliseconds.toDouble() / 1000.0;
+    _springTime += _lastFrameTime;
 //    print('spring time: $_springTime');
 
-    _springingPercent = _sliderSpringSimulation.x(_springTime);
+    _sliderSpringingPercent = _sliderSpringSimulation.x(_springTime);
 //    print('spring percent: $_springingPercent');
 
-    if (_sliderSpringSimulation.isDone(_springTime)) {
+    _crestSpringingPercent = _crestSpringSimulation.x(_lastFrameTime);
+    _crestSpringSimulation = new SpringSimulation(
+      crestSpring,
+      _crestSpringingPercent,
+      _sliderSpringingPercent,
+      _crestSpringSimulation.dx(_lastFrameTime),
+    );
+
+    if (_sliderSpringSimulation.isDone(_springTime) &&
+        _crestSpringSimulation.isDone(_lastFrameTime)) {
       print('spring is done.');
       _springTicker
         ..stop()
@@ -792,12 +886,9 @@ class SpringySliderController extends ChangeNotifier {
     notifyListeners();
   }
 
-  double get springingPercent => _springingPercent;
+  double get sliderSpringingPercent => _sliderSpringingPercent;
 
-  set springingPercent(double newValue) {
-    _springingPercent = newValue;
-    notifyListeners();
-  }
+  double get crestSpringingPercent => _crestSpringingPercent;
 }
 
 enum SpringySliderState {
