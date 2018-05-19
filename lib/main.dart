@@ -586,26 +586,24 @@ class SliderClipper extends CustomClipper<Path> {
     final crestSpringPercentFromBottom = 1.0 - sliderController.crestSpringingPercent;
 
     final baseY = top + (basePercentFromBottom * height);
-    final leftX = -0.15 * size.width;
+    final leftX = -0.85 * size.width;
     final leftPoint = new Point(leftX, baseY);
+
+    final centerX = 0.15 * size.width;
+    final centerPoint = new Point(centerX, baseY);
+
     final rightX = 0.15 * size.width + size.width;
     final rightPoint = new Point(rightX, baseY);
 
     final crestY = top + (crestSpringPercentFromBottom * height);
-    final crestPoint = new Point(size.width / 2, crestY.clamp(top, bottom));
+    final crestPoint = new Point(((rightX - centerX) / 2) + centerX, crestY);
+
+    final troughY = baseY + (baseY - crestY);
+    final troughPoint = new Point((centerX - leftX) / 2 + leftX, troughY);
 
     print('Drawing spring blob. BaseY: $baseY, crestY: $crestY');
 
-    // If user drags beyond top/bottom boundary
-    double excessDrag = 0.0;
-    if (sliderController.sliderSpringingPercent < 0.0) {
-      excessDrag = sliderController.sliderSpringingPercent;
-    } else if (sliderController.sliderSpringingPercent > 1.0) {
-      excessDrag = sliderController.sliderSpringingPercent - 1.0;
-    }
-    final baseControlPointWidth = 150.0;
-    final thickeningFactor = excessDrag * height * 0.05;
-    final controlPointWidth = (200.0 * thickeningFactor).abs() + baseControlPointWidth;
+    final controlPointWidth = 100.0;
 
     // Fill bottom rectangle
     final path2 = new Path();
@@ -615,28 +613,45 @@ class SliderClipper extends CustomClipper<Path> {
     path2.lineTo(leftPoint.x, size.height);
     path2.lineTo(leftPoint.x, leftPoint.y);
     path2.close();
-//    sliderPaint.blendMode = debugPaint.blendMode;
-//    canvas.drawPath(path2, sliderPaint);
     compositePath.addPath(path2, const Offset(0.0, 0.0));
 
-    // Move to right crest and curve to left of wave.
-    final pathRight = new Path();
-    pathRight.moveTo(crestPoint.x, crestPoint.y);
-    pathRight.quadraticBezierTo(
-        crestPoint.x - controlPointWidth, crestPoint.y, leftPoint.x, leftPoint.y);
+    // Move to left crest/trough and curve to left of wave.
+    final pathLeftCrestTrough = new Path();
+    pathLeftCrestTrough.moveTo(troughPoint.x, troughPoint.y);
+    pathLeftCrestTrough.quadraticBezierTo(
+        troughPoint.x - controlPointWidth, troughPoint.y, leftPoint.x, leftPoint.y);
+
+    // Move to left crest/trough and curve to center of wave.
+    pathLeftCrestTrough.moveTo(troughPoint.x, troughPoint.y);
+    pathLeftCrestTrough.quadraticBezierTo(
+        troughPoint.x + controlPointWidth, troughPoint.y, centerPoint.x, centerPoint.y);
+    pathLeftCrestTrough.lineTo(leftPoint.x, leftPoint.y);
+    pathLeftCrestTrough.close();
+
+    if (crestSpringPercentFromBottom < basePercentFromBottom) {
+      // We want to remove the left path.
+      compositePath.fillType = PathFillType.evenOdd;
+    }
+    compositePath.addPath(pathLeftCrestTrough, const Offset(0.0, 0.0));
+
+    // Move to right crest and curve to center of wave.
+    final pathRightCrestTrough = new Path();
+    pathRightCrestTrough.moveTo(crestPoint.x, crestPoint.y);
+    pathRightCrestTrough.quadraticBezierTo(
+        crestPoint.x - controlPointWidth, crestPoint.y, centerPoint.x, centerPoint.y);
 
     // Move to right crest and curve to right of wave.
-    pathRight.moveTo(crestPoint.x, crestPoint.y);
-    pathRight.quadraticBezierTo(
+    pathRightCrestTrough.moveTo(crestPoint.x, crestPoint.y);
+    pathRightCrestTrough.quadraticBezierTo(
         crestPoint.x + controlPointWidth, crestPoint.y, rightPoint.x, rightPoint.y);
-    pathRight.lineTo(leftPoint.x, leftPoint.y);
-    pathRight.close();
+    pathRightCrestTrough.lineTo(centerPoint.x, centerPoint.y);
+    pathRightCrestTrough.close();
 
     if (crestSpringPercentFromBottom > basePercentFromBottom) {
       // We want to remove the right path.
       compositePath.fillType = PathFillType.evenOdd;
     }
-    compositePath.addPath(pathRight, const Offset(0.0, 0.0));
+    compositePath.addPath(pathRightCrestTrough, const Offset(0.0, 0.0));
 
     return compositePath;
   }
@@ -718,8 +733,8 @@ class SpringySliderController extends ChangeNotifier {
 
   final SpringDescription crestSpring = new SpringDescription(
     mass: 1.0,
-    stiffness: 10.0,
-    damping: 1.0,
+    stiffness: 5.0,
+    damping: 0.5,
   );
 
   final TickerProvider _vsync;
