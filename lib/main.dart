@@ -264,6 +264,7 @@ class SliderFill extends StatelessWidget {
             sliderController: sliderController,
             paddingTop: paddingTop,
             paddingBottom: paddingBottom,
+            isIOS: Theme.of(context).platform == TargetPlatform.iOS,
           ),
           child: child,
         );
@@ -334,14 +335,16 @@ class SlidingPoints extends StatelessWidget {
 
         final height = constraints.maxHeight - paddingTop - paddingBottom;
         final sliderY = height * (1.0 - sliderPercent) + paddingTop;
-        final pointsYouNeed = (100 * (1.0 - sliderPercent)).round();
-        final pointsYouHave = (100 * sliderPercent).round();
+        final pointsYouNeedPercent = 1.0 - sliderPercent;
+        final pointsYouNeed = (100 * pointsYouNeedPercent).round();
+        final pointsYouHavePercent = sliderPercent;
+        final pointsYouHave = (100 * pointsYouHavePercent).round();
 
         return new Stack(
           children: <Widget>[
             new Positioned(
               left: 30.0,
-              top: sliderY - 50.0,
+              top: sliderY - 10.0 - (40 * pointsYouNeedPercent),
               child: new FractionalTranslation(
                 translation: const Offset(0.0, -1.0),
                 child: new Points(
@@ -354,7 +357,7 @@ class SlidingPoints extends StatelessWidget {
             ),
             new Positioned(
               left: 30.0,
-              top: sliderY + 50.0,
+              top: sliderY + 10.0 + (40 * pointsYouHavePercent),
               child: new Points(
                 points: pointsYouHave,
                 isAboveSlider: false,
@@ -470,9 +473,11 @@ class SliderClipper extends CustomClipper<Path> {
   final SpringySliderController sliderController;
   final double paddingTop;
   final double paddingBottom;
+  final bool isIOS;
 
   SliderClipper({
     this.sliderController,
+    this.isIOS,
     this.paddingTop = 0.0,
     this.paddingBottom = 0.0,
   });
@@ -554,24 +559,28 @@ class SliderClipper extends CustomClipper<Path> {
 //    canvas.drawPath(path2, sliderPaint);
     compositePath.addPath(path2, const Offset(0.0, 0.0));
 
-    // Move to right crest and curve to left of wave.
-    final pathRight = new Path();
-    pathRight.moveTo(crestPoint.x, crestPoint.y);
-    pathRight.quadraticBezierTo(
+    // Move to crest and curve to left of wave.
+    final leftCurve = new Path();
+    leftCurve.moveTo(crestPoint.x, crestPoint.y);
+    leftCurve.quadraticBezierTo(
         crestPoint.x - controlPointWidth, crestPoint.y, leftPoint.x, leftPoint.y);
+    leftCurve.lineTo(crestPoint.x, leftPoint.y);
+    leftCurve.close();
+    compositePath.addPath(leftCurve, const Offset(0.0, 0.0));
 
-    // Move to right crest and curve to right of wave.
-    pathRight.moveTo(crestPoint.x, crestPoint.y);
-    pathRight.quadraticBezierTo(
+    // Move to crest and curve to right of wave.
+    final rightCurve = new Path();
+    rightCurve.moveTo(crestPoint.x, crestPoint.y);
+    rightCurve.quadraticBezierTo(
         crestPoint.x + controlPointWidth, crestPoint.y, rightPoint.x, rightPoint.y);
-    pathRight.lineTo(leftPoint.x, leftPoint.y);
-    pathRight.close();
+    rightCurve.lineTo(crestPoint.x, rightPoint.y);
+    rightCurve.close();
+    compositePath.addPath(rightCurve, const Offset(0.0, 0.0));
 
     if (dragPercentFromBottom > basePercentFromBottom) {
-      // We want to remove the right path.
+      // We want to remove the curve path.
       compositePath.fillType = PathFillType.evenOdd;
     }
-    compositePath.addPath(pathRight, const Offset(0.0, 0.0));
 
     return compositePath;
   }
@@ -596,62 +605,107 @@ class SliderClipper extends CustomClipper<Path> {
     final rightPoint = new Point(rightX, baseY);
 
     final crestY = top + (crestSpringPercentFromBottom * height);
-    final crestPoint = new Point(((rightX - centerX) / 2) + centerX, crestY);
+    final rightCurveCenterPoint = new Point(((rightX - centerX) / 2) + centerX, crestY);
 
     final troughY = baseY + (baseY - crestY);
-    final troughPoint = new Point((centerX - leftX) / 2 + leftX, troughY);
+    final leftCurveCenterPoint = new Point((centerX - leftX) / 2 + leftX, troughY);
 
     print('Drawing spring blob. BaseY: $baseY, crestY: $crestY');
 
     final controlPointWidth = 100.0;
 
     // Fill bottom rectangle
-    final path2 = new Path();
-    path2.moveTo(leftPoint.x, leftPoint.y);
-    path2.lineTo(rightPoint.x, rightPoint.y);
-    path2.lineTo(size.width, size.height);
-    path2.lineTo(leftPoint.x, size.height);
-    path2.lineTo(leftPoint.x, leftPoint.y);
-    path2.close();
-    compositePath.addPath(path2, const Offset(0.0, 0.0));
-
-    // Move to left crest/trough and curve to left of wave.
-    final pathLeftCrestTrough = new Path();
-    pathLeftCrestTrough.moveTo(troughPoint.x, troughPoint.y);
-    pathLeftCrestTrough.quadraticBezierTo(
-        troughPoint.x - controlPointWidth, troughPoint.y, leftPoint.x, leftPoint.y);
-
-    // Move to left crest/trough and curve to center of wave.
-    pathLeftCrestTrough.moveTo(troughPoint.x, troughPoint.y);
-    pathLeftCrestTrough.quadraticBezierTo(
-        troughPoint.x + controlPointWidth, troughPoint.y, centerPoint.x, centerPoint.y);
-    pathLeftCrestTrough.lineTo(leftPoint.x, leftPoint.y);
-    pathLeftCrestTrough.close();
-
-    if (crestSpringPercentFromBottom < basePercentFromBottom) {
-      // We want to remove the left path.
-      compositePath.fillType = PathFillType.evenOdd;
-    }
-    compositePath.addPath(pathLeftCrestTrough, const Offset(0.0, 0.0));
+    final rect = new Path();
+    rect.moveTo(leftPoint.x, leftPoint.y);
+    rect.lineTo(rightPoint.x, rightPoint.y);
+    rect.lineTo(rightPoint.x, size.height);
+    rect.lineTo(leftPoint.x, size.height);
+    rect.lineTo(leftPoint.x, leftPoint.y);
+    rect.close();
+    compositePath.addPath(rect, const Offset(0.0, 0.0));
 
     // Move to right crest and curve to center of wave.
-    final pathRightCrestTrough = new Path();
-    pathRightCrestTrough.moveTo(crestPoint.x, crestPoint.y);
-    pathRightCrestTrough.quadraticBezierTo(
-        crestPoint.x - controlPointWidth, crestPoint.y, centerPoint.x, centerPoint.y);
+    final rightHalf = new Path();
+
+    final leftHalfOfRightCurve = new Path();
+    leftHalfOfRightCurve.moveTo(rightCurveCenterPoint.x, rightCurveCenterPoint.y);
+    leftHalfOfRightCurve.quadraticBezierTo(
+      rightCurveCenterPoint.x - controlPointWidth,
+      rightCurveCenterPoint.y,
+      centerPoint.x,
+      centerPoint.y,
+    );
+    leftHalfOfRightCurve.lineTo(rightCurveCenterPoint.x, centerPoint.y);
+    leftHalfOfRightCurve.close();
+    rightHalf.addPath(leftHalfOfRightCurve, const Offset(0.0, 0.0));
 
     // Move to right crest and curve to right of wave.
-    pathRightCrestTrough.moveTo(crestPoint.x, crestPoint.y);
-    pathRightCrestTrough.quadraticBezierTo(
-        crestPoint.x + controlPointWidth, crestPoint.y, rightPoint.x, rightPoint.y);
-    pathRightCrestTrough.lineTo(centerPoint.x, centerPoint.y);
-    pathRightCrestTrough.close();
+    final rightHalfOfRightCurve = new Path();
+    rightHalfOfRightCurve.moveTo(rightCurveCenterPoint.x, rightCurveCenterPoint.y);
+    rightHalfOfRightCurve.quadraticBezierTo(
+      rightCurveCenterPoint.x + controlPointWidth,
+      rightCurveCenterPoint.y,
+      rightPoint.x,
+      rightPoint.y,
+    );
+    rightHalfOfRightCurve.lineTo(rightCurveCenterPoint.x, rightPoint.y);
+    rightHalfOfRightCurve.close();
+    rightHalf.extendWithPath(rightHalfOfRightCurve, const Offset(0.0, 0.0));
 
-    if (crestSpringPercentFromBottom > basePercentFromBottom) {
-      // We want to remove the right path.
-      compositePath.fillType = PathFillType.evenOdd;
+    compositePath.addPath(rightHalf, const Offset(0.0, 0.0));
+
+    // Move to left crest/trough and curve to left of wave.
+    final leftHalf = new Path();
+
+    final leftCurveOfLeftHalf = new Path();
+    leftCurveOfLeftHalf.moveTo(leftCurveCenterPoint.x, leftCurveCenterPoint.y);
+    leftCurveOfLeftHalf.quadraticBezierTo(
+      leftCurveCenterPoint.x - controlPointWidth,
+      leftCurveCenterPoint.y,
+      leftPoint.x,
+      leftPoint.y,
+    );
+    leftCurveOfLeftHalf.lineTo(leftCurveCenterPoint.x, leftPoint.y);
+    leftCurveOfLeftHalf.close();
+    leftHalf.addPath(leftCurveOfLeftHalf, const Offset(0.0, 0.0));
+
+    // Move to left crest/trough and curve to center of wave.
+    final rightCurveOfLeftHalf = new Path();
+    rightCurveOfLeftHalf.moveTo(leftCurveCenterPoint.x, leftCurveCenterPoint.y);
+    rightCurveOfLeftHalf.quadraticBezierTo(
+      leftCurveCenterPoint.x + controlPointWidth,
+      leftCurveCenterPoint.y,
+      centerPoint.x,
+      centerPoint.y,
+    );
+    rightCurveOfLeftHalf.lineTo(leftCurveCenterPoint.x, centerPoint.y);
+    rightCurveOfLeftHalf.close();
+    leftHalf.extendWithPath(rightCurveOfLeftHalf, const Offset(0.0, 0.0));
+
+    compositePath.addPath(leftHalf, const Offset(0.0, 0.0));
+
+    if (isIOS) {
+      // Fill tiny vertical gap at center of right crest.
+//      compositePath.addRect(
+//        new Rect.fromLTWH(
+//          rightCurveCenterPoint.x - 0.25,
+//          rightCurveCenterPoint.y,
+//          0.5,
+//          rightPoint.y - rightCurveCenterPoint.y,
+//        ),
+//      );
+    } else {
+//      compositePath.addRect(
+//        new Rect.fromLTWH(
+//          centerPoint.x,
+//          centerPoint.y - 0.5,
+//          50.0,
+//          0.5,
+//        ),
+//      );
     }
-    compositePath.addPath(pathRightCrestTrough, const Offset(0.0, 0.0));
+
+    compositePath.fillType = PathFillType.evenOdd;
 
     return compositePath;
   }
@@ -678,13 +732,13 @@ class Points extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final percent = points / 100.0;
-    final pointTextSize = 30.0 + (70.0 * percent);
+    final pointTextSize = 50.0 + (50.0 * percent);
 
     return new Row(
       crossAxisAlignment: isAboveSlider ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: <Widget>[
         new FractionalTranslation(
-          translation: new Offset(0.0, isAboveSlider ? 0.18 : -0.18),
+          translation: new Offset((-0.05 * percent), isAboveSlider ? 0.18 : -0.18),
           child: new Text(
             '$points',
             style: new TextStyle(
